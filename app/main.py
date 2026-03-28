@@ -12,6 +12,10 @@ class ResetRequest(BaseModel):
     task_id: str = "easy"
     seed: int = 42
 
+@app.get("/")
+def root():
+    return {"message": "running"}
+
 @app.get("/health")
 def health():
     return {"status": "ok"}
