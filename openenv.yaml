@@ -1,0 +1,13 @@
+name: "data-cleaning-agent"
+version: "1.0.0"
+description: "Data cleaning validation task"
+tasks:
+  - easy
+  - medium
+  - hard
+validation:
+  endpoint: "{endpoint}"
+  action_schema:
+    $ref: "#/components/schemas/Action"
+  observation_schema:
+    $ref: "#/components/schemas/Observation"

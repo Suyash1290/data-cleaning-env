@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+pandas
+duckdb
+pydantic
+numpy
+requests
+openenv
+openai
+httpx
