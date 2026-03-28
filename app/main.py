@@ -2,17 +2,14 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 import uvicorn
 
-from models.core import Action
-from env.environment import DataCleaningEnv
-
 app = FastAPI()
+
+# Hold state globally
 env_state = {}
 
 class ResetRequest(BaseModel):
     task_id: str = "easy"
     seed: int = 42
-
-print("APP STARTED SUCCESSFULLY")
 
 @app.get("/")
 def root():
@@ -24,13 +21,20 @@ def health():
 
 @app.post("/reset")
 def reset(req: ResetRequest):
+    # Lazy initializations to dramatically accelerate HF docker startup times.
+    from env.environment import DataCleaningEnv
+    
     env = DataCleaningEnv(difficulty=req.task_id)
     obs = env.reset(seed=req.seed)
     env_state["env"] = env
     return obs.model_dump() if hasattr(obs, "model_dump") else obs.dict()
 
 @app.post("/step")
-def step(action: Action):
+def step(action_payload: dict):
+    from models.core import Action
+    # Cast dictionary back to Action model 
+    action = Action(**action_payload)
+    
     if "env" not in env_state:
         raise HTTPException(status_code=400, detail="Environment not reset")
     env = env_state["env"]
