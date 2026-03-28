@@ -1,3 +1,12 @@
+---
+title: Data Cleaning Agent
+emoji: 🤖
+colorFrom: blue
+colorTo: green
+sdk: docker
+app_port: 7860
+pinned: false
+---
 # Data Cleaning Agent Environment
 
 ## Motivation and Description
