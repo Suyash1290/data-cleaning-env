@@ -4,6 +4,8 @@ import uvicorn
 
 app = FastAPI()
 
+print("APP STARTED SUCCESSFULLY")
+
 # Hold state globally
 env_state = {}
 
