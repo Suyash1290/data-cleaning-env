@@ -13,6 +13,9 @@ class ResetRequest(BaseModel):
     task_id: str = "easy"
     seed: int = 42
 
+# Optional payload handler for strict evaluator pipelines requiring no body
+from typing import Optional
+
 @app.get("/")
 def root():
     return {"status": "running"}
@@ -22,7 +25,10 @@ def health():
     return {"status": "ok"}
 
 @app.post("/reset")
-def reset(req: ResetRequest):
+def reset(req: Optional[ResetRequest] = None):
+    if req is None:
+        req = ResetRequest()
+        
     # Lazy initializations to dramatically accelerate HF docker startup times.
     from env.environment import DataCleaningEnv
     
