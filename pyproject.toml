@@ -20,3 +20,6 @@ dependencies = [
     "openai",
     "httpx"
 ]
+
+[project.scripts]
+server = "server.app:start"

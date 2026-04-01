@@ -52,3 +52,6 @@ def step(action_payload: dict):
         "reward": rew.model_dump() if hasattr(rew, "model_dump") else rew.dict(),
         "done": done
     }
+
+def start():
+    uvicorn.run("server.app:app", host="0.0.0.0", port=7860)
