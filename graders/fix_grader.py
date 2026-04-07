@@ -43,4 +43,4 @@ def grade(episode_state) -> float:
 
     base_score = correct / len(manifest) if manifest else 0.0
     penalty = false_fixes * 0.05
-    return max(0.0, min(1.0, base_score - penalty))
+    return max(0.001, min(0.999, base_score - penalty))

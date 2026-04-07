@@ -132,4 +132,12 @@ class DataCleaningEnv:
         if self.state.step_count >= self.state.max_steps:
             self.state.done = True
 
+        self._cumulative_score = getattr(self, "_cumulative_score", 0.001)
+        if self._cumulative_score + reward_score <= 0.001:
+            reward_score = 0.001 - self._cumulative_score
+        elif self._cumulative_score + reward_score >= 0.999:
+            reward_score = 0.999 - self._cumulative_score
+            
+        self._cumulative_score += reward_score
+
         return self._get_obs(), Reward(score=reward_score, breakdown=breakdown), self.state.done
