@@ -30,3 +30,7 @@ def run_sql_against_data(dirty_df: pd.DataFrame, sql: str):
         return passed, None
     except Exception as e:
         return [False] * 5, str(e)
+
+def grade(state) -> float:
+    from graders.fix_grader import grade as fix_grade
+    return fix_grade(state)
