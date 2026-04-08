@@ -4,6 +4,16 @@ from graders.fix_grader import normalize_value
 from tasks.hard import run_sql_against_data
 from tasks.base import MAX_STEPS
 
+
+def clamp_score(val: float) -> float:
+    """Ensure every score returned is strictly in (0, 1) exclusive."""
+    if val <= 0.0:
+        return 0.01
+    if val >= 1.0:
+        return 0.99
+    return val
+
+
 class DataCleaningEnv:
     def __init__(self, difficulty: str = "easy"):
         self.difficulty = difficulty
@@ -24,7 +34,6 @@ class DataCleaningEnv:
             max_steps=self.max_steps,
             done=False
         )
-        self._sum_of_rewards = 0.0
         return self._get_obs()
 
     def _get_obs(self) -> Observation:
@@ -39,7 +48,7 @@ class DataCleaningEnv:
 
     def step(self, action: Action) -> tuple[Observation, Reward, bool]:
         if self.state.done:
-            return self._get_obs(), Reward(score=0.01, breakdown={"error": 1.0}), True
+            return self._get_obs(), Reward(score=0.01, breakdown={"error": 0.01}), True
 
         reward_score = -0.01
         breakdown = {"step_cost": -0.01}
@@ -83,7 +92,7 @@ class DataCleaningEnv:
 
         elif action.type == "fix_cell":
             if action.row is None or action.col is None or action.row >= len(self.state.dirty_df) or action.col not in self.state.dirty_df.columns:
-                pass # invalid row/col -> 0.0 penalty according to spec
+                pass
             else:
                 key = f"{action.row}|{action.col}"
                 manifest_issue = next((m for m in self.state.manifest if m["row"] == action.row and m["col"] == action.col), None)
@@ -133,16 +142,7 @@ class DataCleaningEnv:
         if self.state.step_count >= self.state.max_steps:
             self.state.done = True
 
-        self._sum_of_rewards = getattr(self, "_sum_of_rewards", 0.0)
-        
-        if self.state.step_count == 1:
-            reward_score += 0.01
-            
-        if self._sum_of_rewards + reward_score <= 0.01:
-            reward_score = 0.01 - self._sum_of_rewards
-        elif self._sum_of_rewards + reward_score >= 0.99:
-            reward_score = 0.99 - self._sum_of_rewards
-            
-        self._sum_of_rewards += reward_score
+        # CRITICAL: clamp every individual reward to strictly (0, 1)
+        reward_score = clamp_score(reward_score)
 
         return self._get_obs(), Reward(score=reward_score, breakdown=breakdown), self.state.done

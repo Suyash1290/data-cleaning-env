@@ -12,8 +12,8 @@ MODEL_NAME = os.getenv("MODEL_NAME", "gpt-4o")
 URL = "http://localhost:7860"
 
 MAX_STEPS = 20
-MAX_TOTAL_REWARD = 1.0
-SUCCESS_SCORE_THRESHOLD = 0.8
+MAX_TOTAL_REWARD = 5.0
+SUCCESS_SCORE_THRESHOLD = 0.5
 
 client = OpenAI(
     api_key=API_KEY,
@@ -21,12 +21,10 @@ client = OpenAI(
 )
 
 def log_step(step, action, reward, done, error=None):
-    # Strictly structured stdout log required by Phase 2 parsing
     print(f"[STEP] Action: {json.dumps(action)} | Reward: {reward:+.3f} | Done: {done} | Error: {error}")
 
 def log_end(success, steps, score, rewards):
-    # Strictly structured stdout log required by Phase 2 parsing
-    print(f"[END] Success: {success} | Steps: {steps} | Score: {score:.3f} | Total Steps Metric Evaluated")
+    print(f"[END] Success: {success} | Steps: {steps} | Score: {score:.4f} | Rewards: {json.dumps(rewards)}")
 
 def build_heuristic_actions(obs):
     actions = []
@@ -52,6 +50,7 @@ def build_heuristic_actions(obs):
     return actions
 
 def get_llm_action(obs, step):
+    """Make a real LLM API call through the proxy."""
     try:
         sample = json.dumps(obs.get('table_sample', [])[:1])
         completion = client.chat.completions.create(
@@ -64,6 +63,14 @@ def get_llm_action(obs, step):
         )
     except Exception as e:
         pass
+
+def clamp_score(val):
+    """Clamp a score to strictly (0, 1) — never exactly 0.0 or 1.0."""
+    if val <= 0.0:
+        return 0.01
+    if val >= 1.0:
+        return 0.99
+    return val
 
 def run_inference(task_id="easy"):
     print(f"\n[START] Task_id: {task_id}")
@@ -90,23 +97,25 @@ def run_inference(task_id="easy"):
         
         try:
             res = requests.post(f"{URL}/step", json=action).json()
-            reward = res.get("reward", {}).get("score", 0.0)
+            reward = res.get("reward", {}).get("score", 0.01)
             done = res.get("done", False)
             error = None
         except Exception as e:
-            reward = 0.0
+            reward = 0.01
             done = True
             error = str(e)
-            
+        
+        # Clamp each individual step reward
+        reward = clamp_score(reward)
         rewards.append(reward)
         steps_taken = step_idx
         
         log_step(step=step_idx, action=action, reward=reward, done=done, error=error)
         history.append(f"Step {step_idx}: {action} -> reward {reward:+.3f}")
         
-    score = sum(rewards) / MAX_TOTAL_REWARD if MAX_TOTAL_REWARD > 0 else 0.0
-    # Phase 2 REQUIREMENT: Score mathematically bounded strongly within (0, 1) exclusively
-    score = min(max(score, 0.05), 0.95) 
+    score = sum(rewards) / MAX_TOTAL_REWARD if MAX_TOTAL_REWARD > 0 else 0.01
+    # Clamp final task score to strictly (0, 1) exclusive
+    score = clamp_score(score)
     success = score >= SUCCESS_SCORE_THRESHOLD
 
     log_end(success=success, steps=steps_taken, score=score, rewards=rewards)

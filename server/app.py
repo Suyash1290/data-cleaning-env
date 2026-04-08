@@ -13,8 +13,17 @@ class ResetRequest(BaseModel):
     task_id: str = "easy"
     seed: int = 42
 
-# Optional payload handler for strict evaluator pipelines requiring no body
 from typing import Optional
+
+
+def clamp_score(val: float) -> float:
+    """Ensure score is strictly in (0, 1) — never 0.0 or 1.0."""
+    if val <= 0.0:
+        return 0.01
+    if val >= 1.0:
+        return 0.99
+    return val
+
 
 @app.get("/")
 def root():
@@ -29,7 +38,6 @@ def reset(req: Optional[ResetRequest] = None):
     if req is None:
         req = ResetRequest()
         
-    # Lazy initializations to dramatically accelerate HF docker startup times.
     from env.environment import DataCleaningEnv
     
     env = DataCleaningEnv(difficulty=req.task_id)
@@ -40,16 +48,20 @@ def reset(req: Optional[ResetRequest] = None):
 @app.post("/step")
 def step(action_payload: dict):
     from models.core import Action
-    # Cast dictionary back to Action model 
     action = Action(**action_payload)
     
     if "env" not in env_state:
         raise HTTPException(status_code=400, detail="Environment not reset")
     env = env_state["env"]
     obs, rew, done = env.step(action)
+
+    rew_dict = rew.model_dump() if hasattr(rew, "model_dump") else rew.dict()
+    # CRITICAL: clamp reward score at the API boundary
+    rew_dict["score"] = clamp_score(rew_dict.get("score", 0.01))
+
     return {
         "observation": obs.model_dump() if hasattr(obs, "model_dump") else obs.dict(),
-        "reward": rew.model_dump() if hasattr(rew, "model_dump") else rew.dict(),
+        "reward": rew_dict,
         "done": done,
         "info": {}
     }
