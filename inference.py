@@ -5,7 +5,7 @@ import json
 import pandas as pd
 from openai import OpenAI
 
-HF_TOKEN = os.getenv("HF_TOKEN", "dummy_token")
+HF_TOKEN = os.getenv("HF_TOKEN")
 API_BASE_URL = os.getenv("API_BASE_URL", "https://api.openai.com/v1")
 MODEL_NAME = os.getenv("MODEL_NAME", "gpt-4o")
 URL = "http://localhost:7860"
