@@ -31,7 +31,7 @@ def root():
 
 @app.get("/health")
 def health():
-    return {"status": "ok"}
+    return {"status": "healthy"}
 
 @app.post("/reset")
 def reset(req: Optional[ResetRequest] = None):
@@ -46,7 +46,7 @@ def reset(req: Optional[ResetRequest] = None):
     obs_dict = obs.model_dump() if hasattr(obs, "model_dump") else obs.dict()
     return {
         "observation": obs_dict,
-        "reward": None,
+        "reward": 0.01,
         "done": False
     }
 
