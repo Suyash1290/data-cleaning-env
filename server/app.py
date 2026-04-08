@@ -43,7 +43,12 @@ def reset(req: Optional[ResetRequest] = None):
     env = DataCleaningEnv(difficulty=req.task_id)
     obs = env.reset(seed=req.seed)
     env_state["env"] = env
-    return obs.model_dump() if hasattr(obs, "model_dump") else obs.dict()
+    obs_dict = obs.model_dump() if hasattr(obs, "model_dump") else obs.dict()
+    return {
+        "observation": obs_dict,
+        "reward": None,
+        "done": False
+    }
 
 @app.post("/step")
 def step(action_payload: dict):
@@ -55,13 +60,12 @@ def step(action_payload: dict):
     env = env_state["env"]
     obs, rew, done = env.step(action)
 
-    rew_dict = rew.model_dump() if hasattr(rew, "model_dump") else rew.dict()
-    # CRITICAL: clamp reward score at the API boundary
-    rew_dict["score"] = clamp_score(rew_dict.get("score", 0.01))
+    # OpenEnv spec: reward must be a plain float, NOT a dict
+    reward_float = clamp_score(rew.score)
 
     return {
         "observation": obs.model_dump() if hasattr(obs, "model_dump") else obs.dict(),
-        "reward": rew_dict,
+        "reward": reward_float,
         "done": done,
         "info": {}
     }

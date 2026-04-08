@@ -20,15 +20,28 @@ client = OpenAI(
     base_url=API_BASE_URL
 )
 
+
+def clamp_score(val):
+    """Clamp a score to strictly (0, 1) — never exactly 0.0 or 1.0."""
+    if val <= 0.0:
+        return 0.01
+    if val >= 1.0:
+        return 0.99
+    return val
+
+
 def log_step(step, action, reward, done, error=None):
     print(f"[STEP] Action: {json.dumps(action)} | Reward: {reward:+.3f} | Done: {done} | Error: {error}")
+
 
 def log_end(success, steps, score, rewards):
     print(f"[END] Success: {success} | Steps: {steps} | Score: {score:.4f} | Rewards: {json.dumps(rewards)}")
 
+
 def build_heuristic_actions(obs):
     actions = []
-    df = pd.DataFrame(obs.get("table_sample", []))
+    sample = obs.get("observation", obs).get("table_sample", obs.get("table_sample", []))
+    df = pd.DataFrame(sample)
     if df.empty:
         return [{"type": "finish"}]
     
@@ -49,10 +62,12 @@ def build_heuristic_actions(obs):
     actions.append({"type": "finish"})
     return actions
 
+
 def get_llm_action(obs, step):
     """Make a real LLM API call through the proxy."""
     try:
-        sample = json.dumps(obs.get('table_sample', [])[:1])
+        sample_data = obs.get("observation", obs).get("table_sample", obs.get("table_sample", []))
+        sample = json.dumps(sample_data[:1])
         completion = client.chat.completions.create(
             model=MODEL_NAME,
             messages=[
@@ -64,13 +79,6 @@ def get_llm_action(obs, step):
     except Exception as e:
         pass
 
-def clamp_score(val):
-    """Clamp a score to strictly (0, 1) — never exactly 0.0 or 1.0."""
-    if val <= 0.0:
-        return 0.01
-    if val >= 1.0:
-        return 0.99
-    return val
 
 def run_inference(task_id="easy"):
     print(f"\n[START] Task_id: {task_id}")
@@ -97,7 +105,11 @@ def run_inference(task_id="easy"):
         
         try:
             res = requests.post(f"{URL}/step", json=action).json()
-            reward = res.get("reward", {}).get("score", 0.01)
+            # OpenEnv spec: reward is a plain float, not a dict
+            raw_reward = res.get("reward", 0.01)
+            if isinstance(raw_reward, dict):
+                raw_reward = raw_reward.get("score", 0.01)
+            reward = clamp_score(float(raw_reward) if raw_reward is not None else 0.01)
             done = res.get("done", False)
             error = None
         except Exception as e:
@@ -105,8 +117,6 @@ def run_inference(task_id="easy"):
             done = True
             error = str(e)
         
-        # Clamp each individual step reward
-        reward = clamp_score(reward)
         rewards.append(reward)
         steps_taken = step_idx
         
@@ -114,11 +124,11 @@ def run_inference(task_id="easy"):
         history.append(f"Step {step_idx}: {action} -> reward {reward:+.3f}")
         
     score = sum(rewards) / MAX_TOTAL_REWARD if MAX_TOTAL_REWARD > 0 else 0.01
-    # Clamp final task score to strictly (0, 1) exclusive
     score = clamp_score(score)
     success = score >= SUCCESS_SCORE_THRESHOLD
 
     log_end(success=success, steps=steps_taken, score=score, rewards=rewards)
+
 
 if __name__ == "__main__":
     tasks = ["easy", "medium", "hard"]
