@@ -39,7 +39,7 @@ class DataCleaningEnv:
 
     def step(self, action: Action) -> tuple[Observation, Reward, bool]:
         if self.state.done:
-            return self._get_obs(), Reward(score=0.0, breakdown={"error": 1.0}), True
+            return self._get_obs(), Reward(score=0.01, breakdown={"error": 1.0}), True
 
         reward_score = -0.01
         breakdown = {"step_cost": -0.01}
