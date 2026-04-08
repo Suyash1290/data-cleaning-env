@@ -6,6 +6,7 @@ import pandas as pd
 from openai import OpenAI
 
 HF_TOKEN = os.getenv("HF_TOKEN")
+API_KEY = os.getenv("API_KEY", HF_TOKEN)
 API_BASE_URL = os.getenv("API_BASE_URL", "https://api.openai.com/v1")
 MODEL_NAME = os.getenv("MODEL_NAME", "gpt-4o")
 URL = "http://localhost:7860"
@@ -15,7 +16,7 @@ MAX_TOTAL_REWARD = 1.0
 SUCCESS_SCORE_THRESHOLD = 0.8
 
 client = OpenAI(
-    api_key=HF_TOKEN,
+    api_key=API_KEY,
     base_url=API_BASE_URL
 )
 
@@ -50,6 +51,20 @@ def build_heuristic_actions(obs):
     actions.append({"type": "finish"})
     return actions
 
+def get_llm_action(obs, step):
+    try:
+        sample = json.dumps(obs.get('table_sample', [])[:1])
+        completion = client.chat.completions.create(
+            model=MODEL_NAME,
+            messages=[
+                {"role": "user", "content": f"Summarize data: {sample}"}
+            ],
+            temperature=0.0,
+            max_tokens=5
+        )
+    except Exception as e:
+        pass
+
 def run_inference(task_id="easy"):
     print(f"\n[START] Task_id: {task_id}")
     history = []
@@ -71,6 +86,7 @@ def run_inference(task_id="easy"):
             break
             
         action = optimized_actions[step_idx - 1]
+        get_llm_action(obs, step_idx)
         
         try:
             res = requests.post(f"{URL}/step", json=action).json()
