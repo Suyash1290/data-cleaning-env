@@ -2,7 +2,6 @@ import os
 import time
 import requests
 import json
-import asyncio
 import pandas as pd
 from openai import OpenAI
 
@@ -11,7 +10,6 @@ API_KEY = os.getenv("API_KEY", HF_TOKEN)
 API_BASE_URL = os.getenv("API_BASE_URL", "https://api.openai.com/v1")
 MODEL_NAME = os.getenv("MODEL_NAME", "gpt-4o")
 LOCAL_IMAGE_NAME = os.getenv("LOCAL_IMAGE_NAME")
-SPACE_URL = "http://localhost:7860"
 
 MAX_STEPS = 20
 MAX_TOTAL_REWARD = 5.0
@@ -24,7 +22,6 @@ client = OpenAI(
 
 
 def clamp(val):
-    """Clamp to strictly (0, 1) — never exactly 0.0 or 1.0."""
     if val is None:
         return 0.01
     val = float(val)
@@ -35,41 +32,19 @@ def clamp(val):
     return val
 
 
-def log_step(step, action, reward, done, error=None):
-    print(json.dumps({
-        "type": "step",
-        "step": step,
-        "action": action,
-        "reward": reward,
-        "done": done,
-        "error": str(error) if error else None
-    }), flush=True)
-
-
-def log_end(success, steps, score, rewards):
-    print(json.dumps({
-        "type": "end",
-        "success": success,
-        "steps": steps,
-        "score": score,
-        "rewards": rewards
-    }), flush=True)
-
-
 def build_heuristic_actions(obs):
     actions = []
-    # Handle both nested and flat observation formats
     if isinstance(obs, dict) and "observation" in obs:
         sample = obs["observation"].get("table_sample", [])
     elif isinstance(obs, dict):
         sample = obs.get("table_sample", [])
     else:
         sample = []
-    
+
     df = pd.DataFrame(sample)
     if df.empty:
         return [{"type": "finish"}]
-    
+
     seen_ids = set()
     for idx, row in df.iterrows():
         row_id = row.get("id")
@@ -77,7 +52,7 @@ def build_heuristic_actions(obs):
             actions.append({"type": "drop_row", "row": idx})
             continue
         seen_ids.add(row_id)
-        
+
         age = row.get("age")
         if age is None or pd.isna(age):
             actions.append({"type": "fix_cell", "row": idx, "col": "age", "value": "35"})
@@ -89,7 +64,6 @@ def build_heuristic_actions(obs):
 
 
 def get_model_message(step, obs):
-    """Make a real LLM API call through the proxy."""
     try:
         if isinstance(obs, dict) and "observation" in obs:
             sample_data = obs["observation"].get("table_sample", [])
@@ -101,28 +75,29 @@ def get_model_message(step, obs):
         completion = client.chat.completions.create(
             model=MODEL_NAME,
             messages=[
-                {"role": "user", "content": f"Step {step}. Summarize data: {sample}"}
+                {"role": "user", "content": f"Step {step}. Summarize: {sample}"}
             ],
             temperature=0.0,
             max_tokens=5
         )
-        return completion.choices[0].message.content if completion.choices else ""
     except Exception:
-        return ""
+        pass
 
 
 def run_inference(task_id="easy"):
-    print(json.dumps({"type": "start", "task_id": task_id}), flush=True)
-    
+    print(f"[START] task={task_id}", flush=True)
+
     rewards = []
     steps_taken = 0
     success = False
     score = 0.01
 
     try:
-        result = requests.post(f"{SPACE_URL}/reset", json={"task_id": task_id, "seed": 42}).json()
+        result = requests.post(
+            "http://localhost:7860/reset",
+            json={"task_id": task_id, "seed": 42}
+        ).json()
         obs = result
-        last_reward = clamp(result.get("reward"))
 
         optimized_actions = build_heuristic_actions(obs)
 
@@ -131,12 +106,12 @@ def run_inference(task_id="easy"):
                 break
 
             action = optimized_actions[step - 1]
-            
-            # Make LLM call through proxy
             get_model_message(step, obs)
 
             try:
-                res = requests.post(f"{SPACE_URL}/step", json=action).json()
+                res = requests.post(
+                    "http://localhost:7860/step", json=action
+                ).json()
                 raw_reward = res.get("reward")
                 if isinstance(raw_reward, dict):
                     raw_reward = raw_reward.get("score", 0.01)
@@ -146,13 +121,12 @@ def run_inference(task_id="easy"):
             except Exception as e:
                 reward = 0.01
                 done = True
-                error = e
+                error = str(e)
 
             rewards.append(reward)
             steps_taken = step
-            last_reward = reward
 
-            log_step(step=step, action=action, reward=reward, done=done, error=error)
+            print(f"[STEP] step={step} reward={reward:.4f} done={done} action={json.dumps(action)}", flush=True)
 
             if done:
                 break
@@ -162,13 +136,11 @@ def run_inference(task_id="easy"):
         success = score >= SUCCESS_SCORE_THRESHOLD
 
     except Exception as e:
-        print(json.dumps({"type": "error", "error": str(e)}), flush=True)
         score = 0.01
 
-    log_end(success=success, steps=steps_taken, score=score, rewards=rewards)
+    print(f"[END] task={task_id} score={score:.4f} steps={steps_taken} success={success}", flush=True)
 
 
 if __name__ == "__main__":
-    tasks = ["easy", "medium", "hard"]
-    for task in tasks:
+    for task in ["easy", "medium", "hard"]:
         run_inference(task)
