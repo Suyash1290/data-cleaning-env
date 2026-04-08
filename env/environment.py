@@ -24,6 +24,7 @@ class DataCleaningEnv:
             max_steps=self.max_steps,
             done=False
         )
+        self._sum_of_rewards = 0.0
         return self._get_obs()
 
     def _get_obs(self) -> Observation:
@@ -132,12 +133,16 @@ class DataCleaningEnv:
         if self.state.step_count >= self.state.max_steps:
             self.state.done = True
 
-        self._cumulative_score = getattr(self, "_cumulative_score", 0.001)
-        if self._cumulative_score + reward_score <= 0.001:
-            reward_score = 0.001 - self._cumulative_score
-        elif self._cumulative_score + reward_score >= 0.999:
-            reward_score = 0.999 - self._cumulative_score
+        self._sum_of_rewards = getattr(self, "_sum_of_rewards", 0.0)
+        
+        if self.state.step_count == 1:
+            reward_score += 0.01
             
-        self._cumulative_score += reward_score
+        if self._sum_of_rewards + reward_score <= 0.01:
+            reward_score = 0.01 - self._sum_of_rewards
+        elif self._sum_of_rewards + reward_score >= 0.99:
+            reward_score = 0.99 - self._sum_of_rewards
+            
+        self._sum_of_rewards += reward_score
 
         return self._get_obs(), Reward(score=reward_score, breakdown=breakdown), self.state.done
