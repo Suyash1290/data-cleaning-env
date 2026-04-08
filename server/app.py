@@ -50,8 +50,16 @@ def step(action_payload: dict):
     return {
         "observation": obs.model_dump() if hasattr(obs, "model_dump") else obs.dict(),
         "reward": rew.model_dump() if hasattr(rew, "model_dump") else rew.dict(),
-        "done": done
+        "done": done,
+        "info": {}
     }
+
+@app.get("/state")
+def state():
+    if "env" not in env_state or not getattr(env_state["env"], "state", None):
+        raise HTTPException(status_code=400, detail="Environment not reset")
+    st = env_state["env"].state
+    return st.model_dump() if hasattr(st, "model_dump") else st.dict()
 
 def main():
     uvicorn.run("server.app:app", host="0.0.0.0", port=7860)
